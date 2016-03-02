@@ -10,6 +10,14 @@ import java.util.TimeZone;
  * Created by fabrica on 01/03/16.
  */
 public class Clima {
+
+    public static final String ARG_DAY = "day";
+    public static final String ARG_OUTLOOK = "text_outlook";
+    public static final String ARG_IMAGE = "image_symbol";
+    public static final String ARG_TEMP="text_temp";
+    public static final String ARG_MIN="text_min";
+    public static final String ARG_REAL_FEEL="text_real_feel";
+
     public final String dayOfWeek;
     public final String minTemp;
     public final String maxTemp;

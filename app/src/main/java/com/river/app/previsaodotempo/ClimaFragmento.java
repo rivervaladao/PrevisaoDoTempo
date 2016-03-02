@@ -1,5 +1,6 @@
 package com.river.app.previsaodotempo;
 
+import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
@@ -13,7 +14,6 @@ import android.widget.TextView;
  * Created by fabrica on 29/02/16.
  */
 public class ClimaFragmento extends Fragment {
-    public static final String ARG_DAY = "day";
 
     @Nullable
     @Override
@@ -22,10 +22,6 @@ public class ClimaFragmento extends Fragment {
         super.onCreateView(inflater, container, savedInstanceState);
 
         View rootView = inflater.inflate(R.layout.fragment_layout, container, false);
-
-        Bundle args = getArguments();
-
-        int i = args.getInt(ClimaFragmento.ARG_DAY);
 
         TextView textOutlook = ((TextView)
                 rootView.findViewById(R.id.text_outlook));
@@ -38,10 +34,13 @@ public class ClimaFragmento extends Fragment {
         TextView realFeelView = ((TextView)
                 rootView.findViewById(R.id.text_real_feel));
 
-        textOutlook.setText(ClimaData.outlookArray[i]);
-        symbolView.setImageResource(ClimaData.symbolArray[i]);
-        tempsView.setText(ClimaData.tempsArray[i] + "°C");
-        realFeelView.setText(ClimaData.realFeelArray[i] + "°C");
+        Bundle args = getArguments();
+
+        textOutlook.setText(args.getString(Clima.ARG_OUTLOOK));
+        symbolView.setImageBitmap((Bitmap) args.getParcelable(Clima.ARG_IMAGE));
+        tempsView.setText(args.getString(Clima.ARG_TEMP));
+        windView.setText(args.getString(Clima.ARG_MIN));
+        realFeelView.setText(args.getString(Clima.ARG_REAL_FEEL));
 
         return rootView;
     }

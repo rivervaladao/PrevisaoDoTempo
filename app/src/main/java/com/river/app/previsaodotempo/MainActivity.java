@@ -5,7 +5,6 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -13,32 +12,34 @@ import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.TaskStackBuilder;
 import android.support.v4.view.ViewPager;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.widget.ImageView;
 import android.widget.Toast;
 
+import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
+import java.net.URLEncoder;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends FragmentActivity implements ActionBar.TabListener {
 
+    private static final String API_KEY = "32a5720536d3f7b5c7a59170e653f531";
+    private static final String web_service_url =
+            "http://api.openweathermap.org/data/2.5/forecast/daily?q=";
+    private static final String location = "Goiania, BR";
+    private static int notificationId;
     private ViewPager viewPager;
     private ActionBar actionBar;
-    private static int notificationId;
-    private Map<String, Bitmap> bitmaps = new HashMap<>();
+    private List<Clima> climaList;
+    private FragmentAdapter adapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,30 +48,31 @@ public class MainActivity extends FragmentActivity implements ActionBar.TabListe
 
         viewPager = (ViewPager) findViewById(R.id.pager);
 
-        FragmentAdapter adapter = new FragmentAdapter(getSupportFragmentManager());
+        adapter = new FragmentAdapter(getSupportFragmentManager());
         viewPager.setAdapter(adapter);
 
+/*
         Calendar calendar = Calendar.getInstance();
         String weekDay;
         SimpleDateFormat dayFormat;
 
         dayFormat = new SimpleDateFormat("EEEE", Locale.getDefault());
+*/
 
         actionBar = getActionBar();
 
         actionBar.setNavigationMode(ActionBar.NAVIGATION_MODE_TABS);
         actionBar.addTab(actionBar.newTab().setText("Hoje").setTabListener(this));
 
+        URL url = createURL(location);
+
+        new GetClimaTask().execute(url);
+
         if(notificationId == 0){
             postAlert(0);
         }
 
-        for (int i = 1; i < 5; i++) {
-            calendar.add(Calendar.DAY_OF_WEEK, 1);
-            weekDay = dayFormat.format(calendar.getTime());
-            actionBar.addTab(actionBar.newTab().setText(weekDay).setTabListener(this));
-        }
-        //detect page changes
+       //detect page changes
 
         viewPager.setOnPageChangeListener(new ViewPager.OnPageChangeListener() {
             @Override
@@ -93,13 +95,13 @@ public class MainActivity extends FragmentActivity implements ActionBar.TabListe
     private void postAlert(int i) {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this);
         builder.setContentTitle("Alerta do Tempo")
-                .setContentText(ClimaData.outlookArray[i])
+                //.setContentText(climaList.get(i).description)
                 .setSmallIcon(R.drawable.small_icon)
                 .setAutoCancel(true)
                 .setTicker("Prepare-se para se esquentar!");
 
         NotificationCompat.BigPictureStyle bigPictureStyle = new NotificationCompat.BigPictureStyle();
-        bigPictureStyle.bigPicture(BitmapFactory.decodeResource(getResources(),R.drawable.snow_scene));
+        bigPictureStyle.bigPicture(BitmapFactory.decodeResource(getResources(), R.drawable.snow_scene));
 
         builder.setStyle(bigPictureStyle);
 
@@ -107,13 +109,13 @@ public class MainActivity extends FragmentActivity implements ActionBar.TabListe
         TaskStackBuilder stackBuilder = TaskStackBuilder.create(this);
         stackBuilder.addParentStack(MainActivity.class)
                 .addNextIntent(intent);
-        PendingIntent pendingIntent = stackBuilder.getPendingIntent(0,PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent pendingIntent = stackBuilder.getPendingIntent(0, PendingIntent.FLAG_UPDATE_CURRENT);
 
         builder.setContentIntent(pendingIntent);
 
         NotificationManager notificationManager = (NotificationManager) this.getSystemService(Context.NOTIFICATION_SERVICE);
-        notificationManager.notify(notificationId,builder.build());
-        notificationId ++;
+        notificationManager.notify(notificationId, builder.build());
+        notificationId++;
 
     }
 
@@ -154,42 +156,46 @@ public class MainActivity extends FragmentActivity implements ActionBar.TabListe
 
     }
 
-    private class LoadImageAsyncTask extends AsyncTask<String, Void, Bitmap> {
+    // create openweathermap.org web service URL using city
+    private URL createURL(String city) {
+        String apiKey = API_KEY;
+        String baseUrl = web_service_url;
 
-        private ImageView imageView;
-
-        public LoadImageAsyncTask(ImageView imageView) {
-            this.imageView = imageView;
+        try {
+            // create URL for specified city and imperial units (Fahrenheit)
+            String urlString = baseUrl + URLEncoder.encode(city, "UTF-8") +
+                    "&units=imperial&cnt=16&APPID=" + apiKey;
+            return new URL(urlString);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
 
-        @Override
-        protected Bitmap doInBackground(String... params) {
-            Bitmap bitmap = null;
-            HttpURLConnection connection = null;
+        return null; // URL was malformed
+    }
 
-            try {
-                URL url = new URL(params[0]);
-                connection = (HttpURLConnection)  url.openConnection();
-
-                try ( InputStream inputStream = connection.getInputStream() ) {
-                    bitmap = BitmapFactory.decodeStream(inputStream);
-                    bitmaps.put(params[0], bitmap); // cache for later use
-                }
-                catch (Exception e) {
-                    Log.e("LoadImageAsyncTask", e.getMessage());
-                }
-            } catch (Exception e) {
-                Log.e("LoadImageAsyncTask",e.getMessage());
-
-            } finally {
-                connection.disconnect();
+    // create Weather objects from JSONObject containing the forecast
+    private void convertJSONtoArrayList(JSONObject forecast) {
+        if (climaList != null)
+            climaList.clear(); // clear old weather data
+        else
+            climaList = new ArrayList<>();
+        try {
+            JSONArray list = forecast.getJSONArray("list");
+            for (int i = 0; i < list.length(); ++i) {
+                JSONObject day = list.getJSONObject(i); // get one day's data
+                JSONObject temperatures = day.getJSONObject("temp");
+                JSONObject weather =
+                        day.getJSONArray("weather").getJSONObject(0);
+                climaList.add(new Clima(
+                        day.getLong("dt"), // date/time timestamp
+                        temperatures.getDouble("min"), // minimum temperature
+                        temperatures.getDouble("max"), // maximum temperature
+                        day.getDouble("humidity"), // percent humidity
+                        weather.getString("description"), // weather conditions
+                        weather.getString("icon"))); // icon name
             }
-
-            return null;
-        }
-        @Override
-        protected void onPostExecute(Bitmap bitmap) {
-            imageView.setImageBitmap(bitmap);
+        } catch (JSONException e) {
+            e.printStackTrace();
         }
     }
 
@@ -209,15 +215,17 @@ public class MainActivity extends FragmentActivity implements ActionBar.TabListe
                         while ((line = reader.readLine()) != null) {
                             builder.append(line);
                         }
+
                     } catch (IOException e) {
                         Toast.makeText(MainActivity.this,
                                 " erro ao ler dados do webservice", Toast.LENGTH_LONG).show();
-                        return new JSONObject(builder.toString());
+                        e.printStackTrace();
                     }
-
+                    return new JSONObject(builder.toString());
                 } else {
                     Toast.makeText(MainActivity.this,
                             " erro webservice indisponivel", Toast.LENGTH_LONG).show();
+
                 }
 
             } catch (Exception e) {
@@ -229,6 +237,21 @@ public class MainActivity extends FragmentActivity implements ActionBar.TabListe
             }
             return null;
         }
-    }
 
+        // process JSON response and update ListView
+        @Override
+        protected void onPostExecute(JSONObject weather) {
+            convertJSONtoArrayList(weather); // repopulate weatherList
+            if (climaList != null) {
+                adapter.setList(climaList);
+                for (Clima clima : climaList) {
+                    actionBar.addTab(actionBar.newTab().setText(clima.dayOfWeek).setTabListener(MainActivity.this));
+                }
+            } else {
+                throw new RuntimeException("Não consegui nenhum lista de objetos de clima");
+            }
+
+        }
+    }
 }
+
